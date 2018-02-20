@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# This script simply checks for certain code words
+# within log files that can indicate errors.
+# If there are any, it will display this on the status
+# bar as a nicely red colored text with numbers of errors
+#
+# If annoying, it can easily be removed
+
+display_num_bugs() {
+  local listen_for num_lines
+  listen_for="error|exception"
+  num_lines=0
+
+  if [ -f "$HOME/.config/i3/log/i3log" ]; then
+    i3_log=$(grep "$listen_for" -Pic "$HOME/.config/i3/log/i3log" )
+    num_lines=$((num_lines + i3_log))
+  fi
+
+  if [[ $num_lines -gt 0 ]]; then
+    echo "<span color=\"#fc2f2f\"> $num_lines</span>"
+  else
+    echo ""
+  fi
+}
+
+# Clears the line in the i3 log.
+clear_lines() {
+  if [ -f "$HOME/.config/i3/log/i3log" ]; then
+    > "$HOME/.config/i3/log/i3log"
+  fi
+
+  echo "<span color=\"#00CC00\"> cleared!</span>"
+}
+
+case $BLOCK_BUTTON in
+  3) clear_lines ;;
+  *) display_num_bugs ;;
+esac

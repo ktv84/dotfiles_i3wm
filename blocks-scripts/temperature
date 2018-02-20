@@ -1,0 +1,94 @@
+#!/bin/bash
+
+# This script is to show the average core temperature of the
+# system on the bar. It will retrieve the temperature of all
+# the cores and average it.
+#
+# Requires `sensors` to be available on the system
+
+# Retrieves the average core temperature of the system
+# by querying `sensors`. If `sensors` isnt installed, it will
+# just return an empty string.
+#
+# Accepts no arguments
+get_average_temperature() {
+  if ! hash sensors 2>/dev/null; then
+    echo ""
+    return
+  fi
+
+  local lines tempIFS elements sum average len
+
+  # Retrieve the core temperatures from sensors
+  sum=0
+  lines=$(sensors | grep -A 0 'Core' | cut -c17-18 | paste -sd "," -)
+
+  # Save the IFS
+  tempIFS=$IFS
+
+  # Turn a comma separeted string to an array
+  IFS=", " read -r -a elements <<< "$lines"
+  IFS=$tempIFS
+  len=${#elements[@]}
+
+  # sum all the core temperature together
+  for element in "${elements[@]}"; do
+    sum=$((element + sum))
+  done
+
+  # Make sure we dont divide by zero
+  if [ "$len" -eq 0 ]; then
+    echo ""
+    return
+  fi
+
+  average=$((sum / len))
+
+  echo "$average"
+}
+
+# Returns the temperature as a colored pango string,
+# if `sensors` is installed, otherwise returns an empty
+# string to not create an entry in the bar.
+#
+# The colors of the string is determined by the average
+# temperature. Above 50 C is yellow, above 75 is red
+#
+# Accepts no arguments
+update_temperature() {
+  local res color icon
+  color=""
+  res=$(get_average_temperature)
+  icon=""
+
+  if [ -z "$res" ]; then
+    echo ""
+    return
+  fi
+
+  # Determine the color of the label
+  if [[ $res -gt 75 ]]; then
+    color="#fc2f2f"
+    #icon=""
+    icon=""
+  elif [[ $res -gt 50 ]]; then
+    color="#e67e22"
+    #icon=""
+    icon=""
+  fi
+
+  # Pad the result of its less than 3 in length
+  while [[ ${#res} -lt 3 ]]; do
+    res=" $res"
+  done
+
+  if [ -z "$color" ]; then
+    echo "<span>$icon$res°C</span>"
+  else
+    echo "<span color=\"$color\">$icon$res°C</span>"
+  fi
+}
+
+case $BLOCK_BUTTON in
+  *) update_temperature ;;
+esac

@@ -1,0 +1,43 @@
+#!/usr/bin/python3
+"""
+  This script allows you to move the selected window from the scratchpad
+  to the currently focused workspace.
+"""
+import i3ipc
+import os
+import json
+
+i3 = i3ipc.Connection()
+
+def get_num_scratchpad_windows():
+  """
+     Returns a list of number of scratchpad windows and whether
+     or not one of them is urgent
+  """
+  root       = i3.get_tree()
+  scratchpad = [x for x in root.descendents() if x.name == "__i3_scratch"]
+
+  if len(scratchpad) == 0:
+    return (0, False)
+
+  windows = scratchpad[0].descendents()
+  num_real_windows = 0
+  is_urgent = False
+  # Go through all possible elements of the scratchpad
+  # and save the windows
+  for window in windows:
+    if window and window.name:
+      num_real_windows += 1
+      is_urgent = is_urgent or window.urgent
+
+  return (num_real_windows, is_urgent)
+
+if __name__ == '__main__':
+  num_windows, is_urgent = get_num_scratchpad_windows()
+
+  if num_windows == 0:
+    pass
+  elif is_urgent:
+    print('{"background": "#f9422d", "full_text": " %s"}' % num_windows)
+  else:
+    print('{"full_text": " %s"}' % num_windows)

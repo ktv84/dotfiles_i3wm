@@ -1,0 +1,69 @@
+#!/bin/bash
+# shellcheck disable=SC2155
+# Requires an argument, either Master or Capture
+
+# Retrieves the volume as a number
+# $1 Name of the amixer type (Master, Capture etc)
+get_volume() {
+  local vol=$(amixer get "$1" | grep -E -o '[0-9]{1,3}?%' | head -1)
+  echo "${vol/\%}"
+}
+
+# Increases the volume by 2 %
+# $1 Name of the amixer type (Master, Capture etc)
+inc_volume() {
+  local vol=$(get_volume "$1")
+
+  if [[ $vol -gt 98 ]]; then
+   vol=100
+  else
+   vol=$((vol + 2))
+  fi
+
+  amixer set "$1" "$vol%"
+}
+
+# Decreases the volume by 2 %
+# $1 Name of the amixer type (Master, Capture etc)
+dec_volume() {
+  local vol=$(get_volume "$1")
+
+  if [[ $vol -lt 2 ]]; then
+   vol=0
+  else
+   vol=$((vol - 2))
+  fi
+
+  amixer set "$1" "$vol%"
+}
+
+# Formats the string from amixer into a nicely
+# formatted pango string with captures and colors
+# $1 the string from amixer
+# $2 Name of the amixer type (Master, Capture etc)
+format() {
+  local vol=$(echo "$1" | grep -E -o '[0-9]{1,3}?%' | head -1)
+  local muted=$(echo "$1" | grep -o '\[on\]')
+  local micropone=""
+
+  if [[ -n $muted ]] && [ "$2" = "Master" ]; then
+    echo "<span> $vol</span>"
+  elif [[ -n $muted ]]; then
+    local micropone=""
+    echo "<span color='#FF0000'> 0%</span>"
+  elif [ "$2" = "Master" ]; then
+    echo "<span color='#FF0000'> $vol</span>"
+  else
+    echo "<span> $vol</span>"
+  fi
+}
+
+case $BLOCK_BUTTON in
+  # 2) ;;
+  3) format "$(amixer set "$1" toggle)" "$1" ;;
+  4) format "$(inc_volume "$1")" "$1"        ;;
+  5) format "$(dec_volume "$1")" "$1"        ;;
+  # 8) ;;
+  # 9) ;;
+  *) format "$(amixer get "$1")" "$1"        ;;
+esac

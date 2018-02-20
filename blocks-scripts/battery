@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# This script is used to show the battery status of
+# a laptop.
+# Depending on the status of the battery it will
+# show the following:
+# Color:
+# > 20% red, > 50% yellow, <= 50% Green
+# Battery icon indicates status too, will
+# change to charge icon if plugged in
+#
+# This script will only show something if;
+# 1. acpi is installed
+# 2. Finds battery / Charged in output
+
+get_battery_status() {
+  if ! hash acpi 2>/dev/null; then
+    echo ""
+    return
+  fi
+
+  local is_not_plugged_in percent dur h m t color icon
+
+  is_not_plugged_in=$(acpi | grep -o "Discharging")
+  percent=$(acpi | grep -Po "\d?\d?\d%" | sed 's/%//g')
+  dur=$(acpi | grep -Po '\d\d:\d\d:\d\d')
+  h=$(echo "$dur" | awk -F: '{print $1}')
+  m=$(echo "$dur" | awk -F: '{print $2}')
+
+  if [ -z "$dur" ]; then
+    t=""
+  elif [ ! "$h" = "00" ]; then
+    t=" (~${h/0/}h ${m}m)"
+  else
+    t=" (~${m}m)"
+  fi
+
+  #icon=""
+  icon=""
+
+  if [[ $percent -lt 20 ]]; then
+    color="#BB0000"
+    if [[ -n $is_not_plugged_in ]]; then
+      icon=""
+    fi
+  elif [[ $percent -lt 50 ]]; then
+    color="#BBBB00"
+    if [[ -n $is_not_plugged_in ]]; then
+      icon=""
+    fi
+  elif [[ $percent -gt 49 ]]; then
+    color="#00BB00"
+
+    if [[ -n $is_not_plugged_in ]]; then
+      icon=""
+    fi
+  elif [[ $percent -gt 90 ]]; then
+    color="#00BB00"
+
+    if [[ -n $is_not_plugged_in ]]; then
+      icon=""
+    fi
+  fi
+
+  echo "<span color=\"$color\">$icon $percent%$t</span>"
+}
+
+get_battery_status

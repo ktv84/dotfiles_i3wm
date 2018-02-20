@@ -1,0 +1,117 @@
+#!/usr/bin/python3
+"""
+  This script allows the changing of workspaces, just like Xmonad.
+  The difference is as following:
+  i3: When you change to a new workspace, you change to that workspace on
+      your active monitor. However, if you change to a workspace that
+      is already on a different monitor, it will change the focus
+      to that monitor.
+  xmonad: When you change to a new workspace, you change to that workspace
+          on your active monitor. If you change to a workspace
+          that is already on a different monitor, the currently focused
+          and the chosen workspace will switch places and you'll have the
+          workspace on your active monitor.
+"""
+
+import i3ipc
+import logging
+import sys
+import time
+
+i3  = i3ipc.Connection()
+log = logging.getLogger()
+
+def setup_logger(name, level=logging.DEBUG):
+  """Initalizes the logger with selected name and level"""
+  log.setLevel(level)
+  channel = logging.FileHandler("/tmp/%s.log" % name)
+  channel.setLevel(level)
+  formatter = logging.Formatter(
+      '%(asctime)s - ' +
+      '%(levelname)s - ' +
+      '%(funcName)s:%(filename)s:%(lineno)d - ' +
+      '%(message)s')
+  channel.setFormatter(formatter)
+  log.addHandler(channel)
+
+def command(command_str):
+  logging.debug("Performing command '%s'", command_str)
+  res = i3.command(command_str)
+
+  if not res or len(res) == 0 or not res[0]['success']:
+    logging.error('Unable to perform the command "%s": "%s"', command_str, res)
+
+def switch_workspace(num):
+  """
+    Switches to the requested workspace. If the requested workspace
+    is on a different monitor, switch the currently active workspace with
+    the requested one.
+  """
+
+  workspaces          = i3.get_workspaces()
+  focused_workspace   = [ws for ws in workspaces if ws['focused']]
+  requested_workspace = [ws for ws in workspaces if str(ws['num']) == num]
+
+  # If no focused workspace, we do nothing but question how..?
+  if len(focused_workspace) == 0:
+    log.error("No focused workspace.. How?")
+    return
+
+  # If the workspace doesnt exist, switch to it
+  if len(requested_workspace) == 0:
+    log.debug("Requested workspace did not exist, switching.")
+    return command('workspace number ' + str(num))
+
+  focused_workspace   = focused_workspace[0]
+  requested_workspace = requested_workspace[0]
+
+  # If they are on the same output, we just switch like normal
+  if requested_workspace['output'] == focused_workspace['output']:
+    log.debug("Workspace on same output, switching")
+    return command('workspace number ' + str(num))
+
+  # Retrieve the currently visble workspace on the monitor that
+  # the requested workspace is on. If it is not requested workspace,
+  # we have to switch back the visible one
+  visible_workspace = [ws
+                       for ws in workspaces
+                       if ws['output'] == requested_workspace['output'] and
+                          ws['num'] != requested_workspace['num'] and
+                          ws['visible']
+                      ]
+
+  # Switch the workspaces around so that the requested is on the current
+  # active monitor and the focused workspace is on the monitor that the
+  # requested was on
+  log.debug('Outputs are different. Switching workspaces around')
+  if requested_workspace['visible']:
+    command('move workspace to output ' + requested_workspace['output'])
+  command('workspace number ' + str(num))
+  command('move workspace to output ' + focused_workspace['output'])
+
+  # Sleep to allow i3ipc and i3 to do commands
+  time.sleep(0.1)
+
+  # If the requested workspace was not the visible workspace on the monitor
+  # it was at, make sure the moved focused workspace is not the visible either
+  #
+  # Or if the requested workspace was visible, make moved focused workspace
+  # visible.
+  #if len(visible_workspace) == 0:
+  #  log.debug('Making switched workspace visible on non-active screen')
+  #  command('workspace number ' + str(focused_workspace['num']))
+  #else:
+  #  log.debug('Switching back to visbile workspace on non-active screen')
+  #  command('workspace number ' + str(visible_workspace[0]['num']))
+
+  # Finally, focus requested workspace
+  time.sleep(0.1)
+  command('workspace number ' + str(num))
+
+if __name__ == "__main__":
+  setup_logger('xmonad-workspace-switcher')
+
+  if len(sys.argv) < 2:
+    log.error("usage: <workspacenumber>")
+  else:
+    switch_workspace(sys.argv[1])

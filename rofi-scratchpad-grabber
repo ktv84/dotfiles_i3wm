@@ -1,0 +1,133 @@
+#!/usr/bin/python3
+"""
+  This script allows you to move the selected window from the scratchpad
+  to the currently focused workspace.
+"""
+import i3ipc
+import sys
+import logging
+
+i3  = i3ipc.Connection()
+log = logging.getLogger()
+
+def setup_logger(name, level=logging.DEBUG):
+  """Initalizes the logger with selected name and level"""
+  log.setLevel(level)
+  channel = logging.FileHandler("/tmp/%s.log" % name)
+  channel.setLevel(level)
+  formatter = logging.Formatter(
+      '%(asctime)s - ' +
+      '%(levelname)s - ' +
+      '%(funcName)s:%(filename)s:%(lineno)d - ' +
+      '%(message)s')
+  channel.setFormatter(formatter)
+  log.addHandler(channel)
+
+def pad_name(name, pad_length=1, max_length=0):
+  """
+    Pads the name with whitespace to the lengt of pad_length.
+    Also allows you to strip a string if it is above max_length.
+  """
+  while len(name) < pad_length:
+    name += " "
+
+  if max_length != 0 and len(name) > max_length:
+    name = name[0:max_length-3] + "..."
+
+  return name
+
+def get_scratchpad():
+  """
+    Returns a reference to the i3 scratchpad if it exists
+  """
+  root = i3.get_tree()
+  scratchpad = [x for x in root.descendents() if x.name == "__i3_scratch"]
+
+  if len(scratchpad) > 0:
+    return scratchpad[0]
+  return None
+
+def get_scratchpad_windows():
+  """
+     Retrieves all windows inside the scratcpad as a list.
+     Each list entry contains a i3.Con class object that represents
+     a window
+     It also returns the longest name and longest class. The reason
+     for this is to optimize the amount of loops that are needed.
+     Returns a tuple containing the following:
+     (windows, longest_name, longest_class)
+  """
+  scratchpad   = get_scratchpad()
+  windows      = []
+  longest_name  = 15
+  longest_class = 5
+
+  if scratchpad is None:
+    log.info("Scratchpad doesnt exist")
+    return []
+
+  # Go through all possible elements of the scratchpad
+  # and save the windows
+  for window in scratchpad.descendents():
+    if window and window.name:
+      windows.append(window)
+      longest_name  = max(len(window.name), longest_name)
+      longest_class = max(len(window.window_class), longest_class)
+
+  return (windows, longest_name, longest_class)
+
+def make_entry(window, longest_name, longest_class):
+  """Turns a window into a string representation"""
+  return '%s %s %s' % (pad_name(window.window_class, longest_class),
+                       pad_name(window.name, longest_name),
+                       window.window)
+
+def grab_window_from_scratchpad(entry):
+  """
+    Grabs the selected window from the scratchpad and
+    makes it visible on the currently focused workspace
+  """
+  windows, longest_name, longest_class = get_scratchpad_windows()
+  selected_window = None
+
+  # Find the selected window in the list
+  for window in windows:
+    if make_entry(window, longest_name, longest_class) == entry:
+      selected_window = window
+      break
+
+  if selected_window is None:
+    log.error("Could not find selected window: '%s'", entry)
+    return
+
+  # Move the window to the focused workspace and untoggle floating
+  selected_window.command('scratchpad show')
+  selected_window.command('floating toggle')
+
+def print_windows():
+  """
+    Prints each of the windows on a line by itself in the
+    following format:
+    ProgramName WindowName
+  """
+  windows, longest_name, longest_class = get_scratchpad_windows()
+
+  if len(windows) == 0:
+    log.debug("No windows within the scratchpad")
+    return
+
+  for window in windows:
+    print(make_entry(window, longest_name, longest_class))
+
+if __name__ == '__main__':
+  setup_logger('rofi-window-grabber')
+
+  # No arguments means Rofi is asking for a list
+  # of windows, where as arguments means that a selection
+  # has been made
+  if len(sys.argv) == 1:
+    print_windows()
+  else:
+    grab_window_from_scratchpad(sys.argv[1])
+
+log.debug(sys.argv)

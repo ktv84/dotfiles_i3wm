@@ -1,0 +1,58 @@
+#!/bin/bash
+# This script retrieves memory usage information from `free -m`.
+
+# This function update the memory information by returning a pango string
+# containing the memory usage with a color depending on the value.
+#
+# The colors are red if above 75 or yellow if above 30, else white
+#
+# It accepts one argument. If the argument is 1, it will print
+# out the used memory with the total percent usage. Otherwise,
+# it will just print out used memory
+update_memory() {
+  local mem color total used
+  color=""
+  total=""
+
+  mem=$(free -m | grep Mem)
+  used=$(echo "$mem" | awk '{print $3}')
+  total=$(echo "$mem" | awk '{print $2}')
+  total=$(echo "$used / $total * 100" | bc -l)
+  total=${total/./,}
+  total=$(printf "%0.2f" "$total")
+
+  if [ "$used" -gt 1000 ]; then
+    used=$(echo "$used / 1000" | bc -l)
+    used=${used/./,}
+    used=$(printf "%0.2f GB" "$used")
+  else
+    used="$used MB"
+  fi
+
+  # Choose the colour
+  total=${total/,/.}
+  if [ "$(echo "$total > 75" | bc -l)" -eq 1 ]; then
+    color="#fc2f2f"
+  elif [ "$(echo "$total > 50" | bc -l)" -eq 1 ]; then
+    color="#e67e22"
+  fi
+
+  if [ "$1" -eq 1 ]; then
+    total=" ($total%)"
+  else
+    total=" ($total%)"
+  fi
+
+  if [ -z "$color" ]; then
+    #echo "<span> $used$total</span>"
+    echo "<span> $used$total</span>"
+  else
+    #echo "<span color=\"$color\"> $used$total</span>"
+    echo "<span color=\"$color\"> $used$total</span>"
+  fi
+}
+
+case $BLOCK_BUTTON in
+  1) update_memory "1" ;;
+  *) update_memory "0" ;;
+esac

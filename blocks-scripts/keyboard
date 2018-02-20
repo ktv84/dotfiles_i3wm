@@ -1,0 +1,66 @@
+#!/bin/bash
+
+# This variable describes the x11 layouts that
+# you would like to use. List them, each on their
+# own line.
+USED_KEYBOARD_LAYOUTS=(
+  gb
+  no
+)
+
+# Returns the current layout
+get_keyboard_layout() {
+  setxkbmap -query | grep -i 'layout:' | awk -F: '{print $2}' | tr -d ' '
+}
+
+# Returns the layout with an icon attached to it
+format() {
+  echo " $(get_keyboard_layout)"
+}
+
+# When the user clicks on the language bar it should
+# change to the next layout in the list.
+on_click() {
+  local current next found
+  found=false
+  current=$(get_keyboard_layout)
+
+  # Go through the list of layouts in the list
+  # and find the current one. By setting a found
+  # flag we tell the loop that the next element
+  # should be used. If it is the final element,
+  # the `next` variable will not be defined
+  for layout in "${USED_KEYBOARD_LAYOUTS[@]}"; do
+    if [ "$found" = true ]; then
+      next=$layout
+      break
+    elif [ "$layout" == "$current" ]; then
+      found=true
+    fi
+  done
+
+  # Happens when current is the last
+  # element on the list
+  if [ -z "$next" ]; then
+    next="${USED_KEYBOARD_LAYOUTS[0]}"
+  fi
+
+  # set the keymap and return a nice string
+  setxkbmap "$next"
+  format
+}
+
+# If we get an argument to the script
+# we'll just assume that it wants to change
+# the language. This is so keybindings work with it
+if [ $# -gt 0 ]; then
+  on_click
+  # send signal to i3blocks to update this bar since it
+  # wasnt actually the bar that run the script
+  pkill -RTMIN+1 i3blocks
+else
+  case $BLOCK_BUTTON in
+    1) on_click ;;
+    *) format ;;
+  esac
+fi

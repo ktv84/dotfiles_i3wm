@@ -1,0 +1,11 @@
+#!/bin/bash
+run_calendar() {
+  ~/.config/i3/blocks-scripts/calendar-window "$1" "$2"
+
+  date '+%Y-%m-%d %H:%M '
+}
+
+case $BLOCK_BUTTON in
+ 1) run_calendar "$BLOCK_X" "$BLOCK_Y";;
+ *) date '+%Y-%m-%d %H:%M '
+esac

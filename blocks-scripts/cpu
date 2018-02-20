@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# This script retrieves CPU usage information from `top`. It
+# uses the `bn2` flag in top that makes the usage more accurate
+# in relation to real time. The downside of this is that
+# the query takes a bit more CPU and a bit longer time.
+#
+# How often this is updated should therefore be limited.
+
+# Takes a number and rounds it up to the nearest non-decmial
+# nubmer using `bc`
+ceil() {
+  echo "define ceil(x) {   \
+    if (x < 0) {           \
+      return x/1           \
+    } else {               \
+      if (scale(x) == 0) { \
+        return x           \
+      } else {             \
+        return x/1 + 1     \
+      }                    \
+    }                      \
+  }; ceil($1)" | bc
+}
+
+# This function update the CPU information by returning a pango string
+# containing the CPU usage with a color depending on the value.
+#
+# The colors are red if above 75 or yellow if above 30, else white
+update_cpu() {
+  local res color
+  color=""
+
+  # Retrieve the CPU usage using `top`.
+  res=$(top -bn2                             |
+        grep "Cpu(s)"                        |
+        tail -1                              |
+        sed "s/.*, *\([0-9.]*\)&* id. */\1/" |
+        awk '{print 100 - $1}')
+  res=$(ceil "$res")
+
+  # Choose the colour
+  if [[ $res -gt 75 ]]; then
+    color="#fc2f2f"
+  elif [[ $res -gt 30 ]]; then
+    color="#e67e22"
+  fi
+
+  # Pad the number if the result has less than 2 characters
+  while [[ ${#res} -lt 2 ]]; do
+    res=" $res"
+  done
+
+  if [ -z "$color" ]; then
+    echo "<span> $res%</span>"
+  else
+    echo "<span color=\"$color\"> $res%</span>"
+  fi
+}
+
+case $BLOCK_BUTTON in
+  *) update_cpu ;;
+esac

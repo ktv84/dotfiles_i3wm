@@ -1,0 +1,51 @@
+#!/usr/bin/python3
+import gi
+gi.require_version('Gtk', '3.0')
+
+from gi.repository import Gtk
+from gi.repository import Gdk
+
+from lib.window import BlocksWindow
+
+class Calendar(BlocksWindow):
+  """
+    Shows a calendar
+  """
+  def __init__(self):
+    BlocksWindow.__init__(self, width=300, height=150)
+    self.calendar = Gtk.Calendar.new()
+    self.calendar.set_display_options(
+      Gtk.CalendarDisplayOptions.SHOW_HEADING |
+      Gtk.CalendarDisplayOptions.SHOW_DETAILS |
+      Gtk.CalendarDisplayOptions.SHOW_DAY_NAMES |
+      Gtk.CalendarDisplayOptions.SHOW_WEEK_NUMBERS)
+    self.add(self.calendar)
+    self.calendar.show()
+    self.clipboard = Gtk.Clipboard.get_default(Gdk.Display.get_default())
+    self.calendar.connect('key-press-event', self.on_keypress)
+
+  def on_keypress(self, widget, event):
+    """
+      Handles keypresses on the calenda, which are currently:
+
+      - ctrl+c = Copy the selected date
+    """
+    ctrl_pressed = event.state & Gdk.ModifierType.CONTROL_MASK
+
+    # Copy current selected date to clipboard
+    if ctrl_pressed and event.keyval == Gdk.KEY_c:
+      year, month, day = self.calendar.get_date()
+      clipboard_str = "%s/%s/%s %s:%s" % (str(year).zfill(2),
+                                          str(month).zfill(2),
+                                          str(day).zfill(2),
+                                          '00', '00')
+      self.clipboard.set_text(clipboard_str, -1)
+      print('Setting Clipboard', clipboard_str)
+    # Quit if esc is clicked
+    if event.keyval == Gdk.KEY_Escape:
+      Gtk.main_quit()
+
+cal = Calendar()
+cal.show()
+Gtk.main()
+

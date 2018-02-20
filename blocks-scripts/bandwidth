@@ -1,0 +1,198 @@
+#!/bin/bash
+
+# This script shows the up/down transfer rate of the given network interface.
+# It will indicate this by arrows, where the one that points up is upload and
+# down is download.
+#
+# This expects an interface to be sent as argument to the script, otherwise
+# it will default to the first one that it can detect link on or, in the case
+# of wireless, can see is connected.
+
+contains_space() {
+  case "$1" in
+    *\ * ) echo "1"; ;;
+    *) echo "0"; ;;
+  esac
+}
+
+# If called with an argument, it checks that the argument is a valid
+# interface, returning an error if that is not the case.
+#
+# If called with no argument or if the argument is an empty string
+# it will check /sys/class/net for the avaiable network interfaces
+# and return the ones that are connected.
+#
+# Returns this as a space separated string
+get_network_interface() {
+  # if the given argument is valid, return it
+  if [ $# -gt 0 ] && [ -d "/sys/class/net/$1" ]; then
+    echo "$1"
+    return 0
+  fi
+
+  # if the given argument is not valid, return error
+  if [ $# -gt 0 ] && [ ! -z "$1" ]; then
+    echo "No interface with name $1"
+    return 1
+  fi
+
+  # else we try to find the default connected interface
+  # returning the first interface we find if none or multiple
+  # are connected
+  local interfaces active_interfaces line
+  interfaces=$(ls -1 /sys/class/net | grep -Pv "^lo$")
+
+  if [ -z "$interfaces" ]; then
+    echo "Found no interfaces"
+    return 1
+  fi
+
+  active_interfaces=""
+
+  # for all connections, only add them when
+  # there is one that is connected
+  while read -r line; do
+    # Ignore interfaces where were we cannot check status
+    if [ ! -f "/sys/class/net/$line/carrier" ]; then
+      continue
+    fi
+
+    if [ "$(cat /sys/class/net/"$line"/carrier)" == "1" ] && \
+       [ "$(cat /sys/class/net/"$line"/operstate)" == "up" ]; then
+      active_interfaces=" $line"
+    fi
+  done <<< "$interfaces"
+
+  # strip leading and trailing whitespace
+  echo -e "${active_interfaces}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+# Checks the stored byte difference between the two given files.
+# Expects the second file to be a writable file, it also expects
+# the files to only contain a single line with the byte count
+#
+# Suggested usage is to say the first file is the rx_byte or tx_byte
+# files contained within /sys/class/net/interface/statistics/
+# and the second file is a /tmp/ file.
+#
+# If the tmp file does not exist, it will be created.
+#
+# Stores the current byte and current time into the tmp file after
+# reading it, so that the next update can use this.
+#
+# Returns the average bits per second over since the last update, where the
+# unit is converted to closest highest unit, such as bps, kbps, mbps etc. Only
+# shows the first character of these units to save space
+#
+# This will always try to match a 3 character limit for the number, meaning
+# it will display descimals if the floored number is under 3 characters
+#
+# $1 path to rx_byte or tx_byte in sys/class/net/interface
+# $2 path to /tmp file
+#
+get_diff_network() {
+  local diff current prev current_time prev_time diff_time index unit
+  current=$(cat "$1")
+  current_time=$(date +%s)
+
+  # Retrieve info from the file if it exists
+  # otherwise just use current time (which will return 0)
+  if [ -f "$2" ]; then
+    prev=$(sed -n 1p < "$2")
+    prev_time=$(sed -n 2p < "$2")
+  else
+    prev=$current
+    prev_time=$current_time
+  fi
+
+  # Save current to file for next update
+  echo -e "$current\n$current_time" > "$2"
+
+  # find diff in time, setting 0 to 1
+  diff_time=$((current_time - prev_time))
+
+  if [ $diff_time -eq 0 ]; then
+    diff_time=1
+  fi
+
+  diff=$(((current - prev) * 8 / diff_time))
+  index="0"
+
+  # Convert the number to the highest unit
+  while [ "$(echo "$diff > 1024" | bc)" -eq 1 ]; do
+    diff=$(echo "$diff / 1024" | bc -l)
+    index=$((index + 1))
+  done
+
+  # Find which unit is used and save it
+  case "$index" in
+    0) unit="b" ;;
+    1) unit="k" ;;
+    2) unit="m" ;;
+    3) unit="g" ;;
+    4) unit="p" ;;
+    5) unit="t" ;;
+  esac
+
+  diff=$(printf "%5.1f%s\n" "$diff" "$unit")
+
+  while [[ ${#diff} -lt 7 ]]; do
+    if [ $# -gt 2 ] && [ "$2" == "left" ]; then
+      diff=" $diff"
+    else
+      diff="$diff "
+    fi
+  done
+
+  echo "$diff"
+}
+
+# Uses the above function to display the bandwidth since the last
+# time this function was executed. Running this script more often
+# will give a more accurate representation of your byte per second
+# in and out.
+#
+# Supports multiple interfaces and will show the name of each
+# if more than one is present.
+update_bandwidth() {
+  # Variables used outside of loop
+  local status interfaces multiple_interfaces
+  # variables used inside of loop
+  local tx_bytes rx_bytes
+
+  status=""
+
+  interfaces=$(get_network_interface "$@")
+
+  if [ $? -eq 1 ]; then
+    echo "$interface"
+    return
+  fi
+
+  multiple_interfaces=$(contains_space "$interfaces")
+  index="0"
+
+  for interface in $interfaces; do
+    tx_bytes=$(get_diff_network \
+      /sys/class/net/"$interface"/statistics/tx_bytes \
+      /tmp/"$interface"_prev_tx_bytes)
+
+    rx_bytes=$(get_diff_network \
+      /sys/class/net/"$interface"/statistics/rx_bytes \
+      /tmp/"$interface"_prev_rx_bytes)
+
+    if [ "$multiple_interfaces" -eq 1 ]; then
+      status="$status $interface: ⇅ $tx_bytes $rx_bytes"
+    else
+      status="⇅ $tx_bytes / $rx_bytes"
+    fi
+
+    index=$((index + 1))
+  done
+
+  echo "$status"
+}
+
+case $BLOCK_BUTTON in
+  *) update_bandwidth "$@";;
+esac
