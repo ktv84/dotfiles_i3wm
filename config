@@ -5,6 +5,7 @@ focus_follows_mouse no
 
 # Startup: Autolock screensaver
 exec --no-startup-id xautolock -time 15 -locker '/usr/local/bin/lock -gpf Droid-Sans' &
+exec --no-startup-id nm-applet
 
 # i3 gaps stuff
 gaps inner 4
